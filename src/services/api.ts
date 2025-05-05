@@ -272,10 +272,17 @@ export const api = {
       const response = await axiosInstance.get("/quiz/generate/", { params });
       console.log("Quiz data fetched:", response.data);
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating quiz:", error);
-      // Return empty array if there's an error
-      return [];
+
+      // Extract the error message from the response if available
+      let errorMessage = "Failed to generate quiz";
+      if (error.response && error.response.data && error.response.data.detail) {
+        errorMessage = error.response.data.detail;
+      }
+
+      // Throw the error with the message so it can be handled by the component
+      throw new Error(errorMessage);
     }
   },
 };
