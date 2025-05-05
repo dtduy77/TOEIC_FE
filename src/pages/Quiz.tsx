@@ -34,13 +34,7 @@ const Quiz: React.FC = () => {
   const { isAuthenticated } = useAuth();
 
   // Quiz state
-  const [quizQuestions, setQuizQuestions] = useState<
-    Array<{
-      word: string;
-      correctAnswer: string;
-      options: string[];
-    }>
-  >([]);
+  const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -49,11 +43,11 @@ const Quiz: React.FC = () => {
   // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [quizStarted, setQuizStarted] = useState(false);
   const [showResult, setShowResult] = useState(false);
-  const [quizType, setQuizType] = useState<"short" | "long" | undefined>(
-    undefined
-  );
+  const [quizSize, setQuizSize] = useState<number>(10);
+  const [totalVocabulary, setTotalVocabulary] = useState<number>(0);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -61,16 +55,35 @@ const Quiz: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  // Function to fetch quiz based on selected type
-  const fetchQuiz = async (
-    type?: "short" | "long",
-    customQuestions?: number
-  ) => {
+  // Fetch total vocabulary count when component mounts
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Fetch just 1 question to get the total vocabulary count
+      api.generateQuiz(1).then(response => {
+        const vocabCount = response.totalVocabulary;
+        setTotalVocabulary(vocabCount);
+        // Set the default quiz size to match the total vocabulary count
+        if (vocabCount > 0) {
+          setQuizSize(vocabCount);
+        }
+      }).catch(error => {
+        console.error("Error fetching vocabulary count:", error);
+      });
+    }
+  }, [isAuthenticated]);
+
+  // Function to fetch quiz based on quiz size
+  const fetchQuiz = async (numQuestions: number = quizSize) => {
     setLoading(true);
     setError(null);
+    setWarning(null); // Clear any previous warnings
 
     try {
-      const questions = await api.generateQuiz(type, customQuestions);
+      const response = await api.generateQuiz(numQuestions);
+      const { questions, warning, totalVocabulary } = response;
+      
+      // Update the total vocabulary count
+      setTotalVocabulary(totalVocabulary);
 
       if (questions.length === 0) {
         setError(
@@ -78,6 +91,11 @@ const Quiz: React.FC = () => {
         );
         setLoading(false);
         return;
+      }
+
+      // If there's a warning about quiz size, display it
+      if (warning) {
+        setWarning(warning);
       }
 
       // Transform the backend quiz format to match our component's format
@@ -112,10 +130,10 @@ const Quiz: React.FC = () => {
     }
   };
 
-  // Function to start a quiz with the selected type
-  const startQuiz = (type: "short" | "long") => {
-    setQuizType(type);
-    fetchQuiz(type);
+  // Function to start a quiz with the selected size
+  const startQuiz = (size: number) => {
+    setQuizSize(size);
+    fetchQuiz(size);
   };
 
   // Function to handle selecting an answer
@@ -147,13 +165,13 @@ const Quiz: React.FC = () => {
     setShowResult(false);
     setSelectedAnswer(null);
     setIsCorrect(null);
-    fetchQuiz(quizType);
+    fetchQuiz(quizSize);
   };
 
   // Function to go back to quiz selection
   const backToQuizSelection = () => {
     setQuizStarted(false);
-    setQuizType(undefined);
+    setQuizSize(10); // Reset to default size
     setQuizQuestions([]);
     setShowResult(false);
   };
@@ -225,7 +243,7 @@ const Quiz: React.FC = () => {
                   sx={{
                     p: 4,
                     borderRadius: "20px",
-                    width: 280,
+                    width: 320,
                     background: "rgba(255, 255, 255, 0.9)",
                     backdropFilter: "blur(10px)",
                     transition: "transform 0.3s",
@@ -238,19 +256,61 @@ const Quiz: React.FC = () => {
                     gutterBottom
                     sx={{ fontWeight: "bold", color: "#2c3e50" }}
                   >
-                    Short Quiz
+                    Custom Quiz
                   </Typography>
                   <Typography
                     variant="body1"
                     component="div"
                     sx={{ mb: 3, color: "#7f8c8d" }}
                   >
-                    Test your knowledge with 20 questions from your vocabulary
-                    list.
+                    Test your knowledge with vocabulary questions. Choose how many questions you want to answer.
                   </Typography>
+                  
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="body2" component="div" sx={{ mb: 1, color: "#7f8c8d" }}>
+                      Number of questions: {quizSize}
+                      {totalVocabulary > 0 && (
+                        <span style={{ marginLeft: '8px', color: '#95a5a6' }}>
+                          (max: {totalVocabulary})
+                        </span>
+                      )}
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <Button 
+                        size="small" 
+                        variant="outlined" 
+                        onClick={() => setQuizSize(Math.max(2, quizSize - 1))}
+                        sx={{ minWidth: '40px' }}
+                        disabled={quizSize <= 2}
+                      >
+                        -1
+                      </Button>
+                      <Box sx={{ flex: 1 }}>
+                        <input
+                          type="range"
+                          min="2"
+                          max={totalVocabulary > 0 ? totalVocabulary : 50}
+                          step="1"
+                          value={quizSize}
+                          onChange={(e) => setQuizSize(Number(e.target.value))}
+                          style={{ width: '100%' }}
+                        />
+                      </Box>
+                      <Button 
+                        size="small" 
+                        variant="outlined" 
+                        onClick={() => setQuizSize(Math.min(totalVocabulary > 0 ? totalVocabulary : 50, quizSize + 1))}
+                        sx={{ minWidth: '40px' }}
+                        disabled={totalVocabulary > 0 && quizSize >= totalVocabulary}
+                      >
+                        +1
+                      </Button>
+                    </Box>
+                  </Box>
+
                   <Button
                     variant="contained"
-                    onClick={() => startQuiz("short")}
+                    onClick={() => startQuiz(quizSize)}
                     fullWidth
                     sx={{
                       background:
@@ -265,55 +325,7 @@ const Quiz: React.FC = () => {
                       },
                     }}
                   >
-                    Start Short Quiz
-                  </Button>
-                </Paper>
-
-                <Paper
-                  sx={{
-                    p: 4,
-                    borderRadius: "20px",
-                    width: 280,
-                    background: "rgba(255, 255, 255, 0.9)",
-                    backdropFilter: "blur(10px)",
-                    transition: "transform 0.3s",
-                    "&:hover": { transform: "translateY(-5px)" },
-                  }}
-                >
-                  <Typography
-                    variant="h5"
-                    component="div"
-                    gutterBottom
-                    sx={{ fontWeight: "bold", color: "#2c3e50" }}
-                  >
-                    Long Quiz
-                  </Typography>
-                  <Typography
-                    variant="body1"
-                    component="div"
-                    sx={{ mb: 3, color: "#7f8c8d" }}
-                  >
-                    Challenge yourself with 60 questions for a comprehensive
-                    review.
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    onClick={() => startQuiz("long")}
-                    fullWidth
-                    sx={{
-                      background:
-                        "linear-gradient(45deg, #FF9800 30%, #FFC107 90%)",
-                      borderRadius: "25px",
-                      padding: "10px",
-                      color: "white",
-                      fontWeight: "bold",
-                      "&:hover": {
-                        background:
-                          "linear-gradient(45deg, #F57C00 30%, #FFB300 90%)",
-                      },
-                    }}
-                  >
-                    Start Long Quiz
+                    Start Quiz
                   </Button>
                 </Paper>
               </Box>
@@ -325,6 +337,21 @@ const Quiz: React.FC = () => {
       // Quiz questions screen
       return (
         <>
+          {warning && (
+            <Box
+              sx={{
+                mb: 3,
+                p: 2,
+                borderRadius: "12px",
+                background: "rgba(255, 193, 7, 0.2)",
+                backdropFilter: "blur(10px)",
+                color: "#856404",
+                border: "1px solid rgba(255, 193, 7, 0.3)",
+              }}
+            >
+              <Typography variant="body1">{warning}</Typography>
+            </Box>
+          )}
           <Box sx={{ mb: 4 }}>
             <LinearProgress
               variant="determinate"
@@ -381,7 +408,7 @@ const Quiz: React.FC = () => {
                 sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 3 }}
               >
                 {quizQuestions[currentQuestionIndex]?.options.map(
-                  (option, index) => (
+                  (option: string, index: number) => (
                     <Button
                       key={index}
                       variant="outlined"
@@ -482,10 +509,7 @@ const Quiz: React.FC = () => {
                 component="div"
                 sx={{ mt: 2, color: "#7f8c8d" }}
               >
-                Quiz type:{" "}
-                {quizType === "short"
-                  ? "Short (20 questions)"
-                  : "Long (60 questions)"}
+                Quiz size: {quizQuestions.length} questions
               </Typography>
             </Box>
           </DialogContent>

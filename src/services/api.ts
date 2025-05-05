@@ -252,37 +252,52 @@ export const api = {
 
   // Quiz endpoints
   generateQuiz: async (
-    quizType?: "short" | "long",
-    numQuestions?: number
-  ): Promise<QuizQuestion[]> => {
+    numQuestions: number = 10
+  ): Promise<{
+    questions: QuizQuestion[];
+    warning?: string;
+    totalVocabulary: number;
+  }> => {
     try {
       // Use the correct endpoint from the backend
-      const params: Record<string, any> = {};
-
-      // If quiz type is specified, use it
-      if (quizType) {
-        params.quiz_type = quizType;
-      }
-
-      // If custom number of questions is specified, use it (overrides quiz_type)
-      if (numQuestions) {
-        params.num_questions = numQuestions;
-      }
+      const params: Record<string, any> = {
+        num_questions: numQuestions,
+      };
 
       const response = await axiosInstance.get("/quiz/generate/", { params });
-      console.log("Quiz data fetched:", response.data);
-      return response.data;
+
+      // Check if we have a valid response
+      if (response.data) {
+        const { questions, total_vocabulary } = response.data;
+        // If the number of questions is less than requested, add a warning
+        let warning: string | undefined;
+
+        if (total_vocabulary < 2) {
+          warning =
+            "You need at least 2 vocabulary words to create a quiz. Please add more words to your vocabulary.";
+        } else if (questions.length < numQuestions && questions.length > 0) {
+          warning = `You only have ${total_vocabulary} vocabulary words available. We've created a quiz with all your available words.`;
+        }
+
+        return {
+          questions: questions,
+          warning,
+          totalVocabulary: total_vocabulary,
+        };
+      }
+
+      // Default return if response data is missing
+      return {
+        questions: [],
+        warning: "No quiz data received from server.",
+        totalVocabulary: 0,
+      };
     } catch (error: any) {
       console.error("Error generating quiz:", error);
 
-      // Extract the error message from the response if available
-      let errorMessage = "Failed to generate quiz";
-      if (error.response && error.response.data && error.response.data.detail) {
-        errorMessage = error.response.data.detail;
-      }
-
-      // Throw the error with the message so it can be handled by the component
-      throw new Error(errorMessage);
+      throw new Error(
+        error.response?.data?.detail || "Failed to generate quiz"
+      );
     }
   },
 };
